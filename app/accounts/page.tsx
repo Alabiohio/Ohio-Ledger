@@ -17,8 +17,7 @@ export default async function AccountsPage() {
     .single();
 
   if (!business) {
-    // Should have been created in dashboard or trigger, but just in case
-    return <div className="p-8 text-black">Please navigate to Dashboard first to initialize your business.</div>;
+    redirect('/setup');
   }
 
   const { data: accounts = [], error } = await supabase
@@ -44,13 +43,27 @@ export default async function AccountsPage() {
 
     if (!currBusiness) return;
 
-    await supabaseServer.from('accounts').insert({
-      business_id: currBusiness.id,
-      name: formData.get('name'),
-      type: formData.get('type'),
-      category: formData.get('category'),
-      is_default: false
-    });
+    const name = formData.get('name') as string;
+    const type = formData.get('type') as string;
+    const category = formData.get('category') as string;
+
+    // Just insert new account. If name exists per business, DB unique constraint or simple check
+    const { data: existing } = await supabaseServer
+      .from('accounts')
+      .select('id')
+      .eq('business_id', currBusiness.id)
+      .ilike('name', name)
+      .single();
+
+    if (!existing) {
+      await supabaseServer.from('accounts').insert({
+        business_id: currBusiness.id,
+        name,
+        type,
+        category,
+        is_default: false
+      });
+    }
 
     revalidatePath('/accounts');
   }
@@ -60,6 +73,19 @@ export default async function AccountsPage() {
     const supabaseServer = await createClient();
     const accountId = formData.get('id');
     await supabaseServer.from('accounts').delete().eq('id', accountId).eq('is_default', false);
+    revalidatePath('/accounts');
+  }
+
+  async function updateBudgetAction(formData: FormData) {
+    'use server';
+    const supabaseServer = await createClient();
+    const id = formData.get('id') as string;
+    const newBudget = Number(formData.get('monthly_budget')) || 0;
+
+    await supabaseServer.from('accounts').update({
+      monthly_budget: newBudget
+    }).eq('id', id);
+
     revalidatePath('/accounts');
   }
 
@@ -94,16 +120,42 @@ export default async function AccountsPage() {
                           {account.name}
                           {account.is_default && <span className="ml-2 text-[10px] uppercase tracking-wider text-ohio-peach font-bold">System</span>}
                         </p>
-                        <p className="text-xs text-[var(--color-brand-gray)]">{account.category || 'Uncategorized'}</p>
+                        <p className="text-xs text-[var(--color-brand-gray)] flex items-center gap-2">
+                          <span>{account.category || 'Uncategorized'}</span>
+                          {Number(account.monthly_budget) > 0 && <span className="px-1.5 py-0.5 bg-orange-100 text-orange-800 rounded font-medium">Budget: ₦{Number(account.monthly_budget).toLocaleString()}</span>}
+                        </p>
                       </div>
-                      {!account.is_default && (
-                        <form action={deleteAccount}>
-                          <input type="hidden" name="id" value={account.id} />
-                          <button type="submit" className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </form>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {account.type === 'Expense' && (
+                          <details className="group/edit relative">
+                            <summary className="list-none cursor-pointer px-3 py-1.5 text-[var(--color-brand-peach)] hover:text-[var(--color-brand-dark)] bg-[var(--color-brand-peach)]/10 hover:bg-[var(--color-brand-peach)]/20 rounded-xl transition-colors text-[10px] font-bold uppercase tracking-widest">
+                                Set Budget
+                            </summary>
+                            <div className="absolute right-0 top-full mt-2 w-64 p-4 bg-white border border-gray-100 shadow-2xl rounded-2xl z-10">
+                              <form action={updateBudgetAction} className="flex flex-col gap-3">
+                                <input type="hidden" name="id" value={account.id} />
+                                <label className="text-[10px] font-bold text-gray-500 tracking-wider uppercase">New Monthly Budget (₦)</label>
+                                <input 
+                                  type="number" 
+                                  name="monthly_budget" 
+                                  defaultValue={account.monthly_budget || 0} 
+                                  min="0"
+                                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-ohio-peach"
+                                />
+                                <button type="submit" className="w-full bg-[var(--color-brand-dark)] text-white text-xs font-bold py-2.5 rounded-xl hover:bg-[var(--color-brand-peach)] hover:text-[var(--color-brand-dark)] transition-colors">Apply Budget</button>
+                              </form>
+                            </div>
+                          </details>
+                        )}
+                        {!account.is_default && (
+                          <form action={deleteAccount}>
+                            <input type="hidden" name="id" value={account.id} />
+                            <button type="submit" className="p-2 text-red-400 hover:text-red-700 hover:bg-red-50 rounded-xl transition-colors">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </form>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -152,6 +204,8 @@ export default async function AccountsPage() {
                   className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ohio-peach focus:border-transparent transition-all"
                 />
               </div>
+
+
 
               <button 
                 type="submit"

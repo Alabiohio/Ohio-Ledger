@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import Tesseract from 'tesseract.js';
 import { UploadCloud, CheckCircle2, Loader2, TrendingUp, DollarSign } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 
@@ -16,6 +17,7 @@ function UploadForm() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [ocrText, setOcrText] = useState('');
   const [accounts, setAccounts] = useState<any[]>([]);
+  const [inventoryItems, setInventoryItems] = useState<any[]>([]);
   
   const [formData, setFormData] = useState({
     merchant: '',
@@ -26,7 +28,10 @@ function UploadForm() {
     receipt_url: '',
     notes: '',
     account_id: '',
-    payment_mode: 'cash'
+    payment_mode: 'cash',
+    isInventory: false,
+    item_id: '',
+    quantity: '1'
   });
   
   const [isManual, setIsManual] = useState(false);
@@ -50,12 +55,12 @@ function UploadForm() {
         .single();
 
       if (business) {
-        const { data: accs } = await supabase
-          .from('accounts')
-          .select('id, name, type')
-          .eq('business_id', business.id)
-          .order('name');
-        if (accs) setAccounts(accs);
+        const [accsRes, invRes] = await Promise.all([
+           supabase.from('accounts').select('id, name, type').eq('business_id', business.id).order('name'),
+           supabase.from('inventory_items').select('id, name, unit_price').eq('business_id', business.id).order('name')
+        ]);
+        if (accsRes.data) setAccounts(accsRes.data);
+        if (invRes.data) setInventoryItems(invRes.data);
       }
     }
     fetchAccounts();
@@ -163,12 +168,29 @@ function UploadForm() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/transactions', {
+      const isInventory = formData.isInventory;
+      const endpoint = isInventory ? '/api/inventory/transaction' : '/api/transactions';
+      
+      const payload = isInventory 
+        ? {
+            type: formData.type === 'expense' ? 'inventory_purchase' : 'inventory_sale',
+            item_id: formData.item_id,
+            quantity: Number(formData.quantity),
+            unit_price: Number(formData.amount) / Number(formData.quantity) || 0,
+            date: formData.date,
+            payment_mode: formData.payment_mode,
+            merchant: formData.merchant,
+            receipt_url: formData.receipt_url,
+            notes: formData.notes
+          }
+        : formData;
+
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
 
       if (res.ok) {
@@ -282,6 +304,23 @@ function UploadForm() {
               </div>
               
               <div className="space-y-5">
+                <div className="flex items-center gap-4 bg-[var(--background)] p-1.5 rounded-2xl ring-1 ring-[var(--border)]">
+                  <button
+                    type="button"
+                    onClick={() => setFormData({...formData, isInventory: false, account_id: ''})}
+                    className={`flex-1 py-3 text-[10px] font-black uppercase tracking-[0.2em] rounded-xl transition-all ${!formData.isInventory ? 'bg-[var(--foreground)] text-[var(--background)] shadow-xl' : 'text-gray-400 hover:text-gray-600'}`}
+                  >
+                    Standard Ledger
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({...formData, isInventory: true, item_id: ''})}
+                    className={`flex-1 py-3 text-[10px] font-black uppercase tracking-[0.2em] rounded-xl transition-all ${formData.isInventory ? 'bg-[var(--foreground)] text-[var(--background)] shadow-xl' : 'text-gray-400 hover:text-gray-600'}`}
+                  >
+                    Inventory Track
+                  </button>
+                </div>
+
                 <div className="group">
                   <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[var(--color-brand-gray)] mb-2 px-1">Merchant Identity</label>
                   <input 
@@ -294,9 +333,72 @@ function UploadForm() {
                   />
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {formData.isInventory && (
+                  <div className="group">
+                    <div className="flex items-center justify-between mb-2 px-1">
+                      <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[var(--color-brand-gray)]">Select Inventory Item</label>
+                      <Link href="/inventory" className="text-[9px] font-black uppercase tracking-widest text-[var(--color-brand-peach)] hover:text-[var(--color-brand-gold)] border border-[var(--color-brand-peach)]/30 hover:border-[var(--color-brand-gold)] px-2.5 py-1 rounded-md transition-all">
+                        + New Product
+                      </Link>
+                    </div>
+                    <select 
+                      value={formData.item_id}
+                      onChange={(e) => {
+                        const newId = e.target.value;
+                        const item = inventoryItems.find(i => i.id === newId);
+                        setFormData(prev => {
+                          const newState = { ...prev, item_id: newId };
+                          if (item && newState.quantity) {
+                             newState.amount = (Number(newState.quantity) * Number(item.unit_price)).toFixed(2);
+                          }
+                          return newState;
+                        });
+                      }}
+                      className="neo-input appearance-none cursor-pointer font-bold text-[var(--color-ink)]"
+                      required
+                    >
+                      <option value="">Select Item...</option>
+                      {inventoryItems.map(item => (
+                        <option key={item.id} value={item.id}>{item.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div className={`grid grid-cols-1 md:grid-cols-${formData.isInventory ? '3' : '2'} gap-5`}>
+                  {formData.isInventory && (
+                    <div>
+                      <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[var(--color-brand-gray)] mb-2 px-1">Quantity</label>
+                      <input 
+                        type="number" 
+                        min="1"
+                        value={formData.quantity}
+                        onChange={(e) => {
+                           const qty = e.target.value;
+                           setFormData(prev => {
+                             const newState = { ...prev, quantity: qty };
+                             if (newState.item_id) {
+                               const item = inventoryItems.find(i => i.id === newState.item_id);
+                               if (item) {
+                                  newState.amount = (Number(qty) * Number(item.unit_price)).toFixed(2);
+                               }
+                             }
+                             return newState;
+                           });
+                        }}
+                        className="neo-input font-black text-xl"
+                        required
+                      />
+                    </div>
+                  )}
                   <div>
-                    <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[var(--color-brand-gray)] mb-2 px-1">Value Volume (₦)</label>
+                    <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[var(--color-brand-gray)] mb-2 px-1">
+                      Total {formData.isInventory ? 'Value' : 'Volume'} (₦)
+                      {formData.isInventory && formData.item_id && (() => {
+                        const item = inventoryItems.find(i => i.id === formData.item_id);
+                        return item ? ` AT $${Number(item.unit_price).toFixed(2)}/UNIT` : '';
+                      })()}
+                    </label>
                     <input 
                       type="number" 
                       step="0.01"
@@ -307,7 +409,7 @@ function UploadForm() {
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[var(--color-brand-gray)] mb-2 px-1">Entry Timestamp</label>
+                    <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[var(--color-brand-gray)] mb-2 px-1">Timestamp</label>
                     <input 
                       type="date" 
                       value={formData.date}
@@ -318,56 +420,37 @@ function UploadForm() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[var(--color-brand-gray)] mb-2 px-1">Mapping Account</label>
-                    <select 
-                      value={formData.account_id}
-                      onChange={(e) => setFormData({...formData, account_id: e.target.value})}
-                      className="neo-input appearance-none cursor-pointer"
-                      required
-                    >
-                      <option value="">Select Account...</option>
-                      {accounts.filter(a => {
-                        if (formData.payment_mode === 'loan') return a.type === 'Liability';
-                        if (formData.type === 'income') return a.type === 'Income';
-                        // For Outflows (Expense flow), allow Expenses, Assets (Inventory), OR Liabilities (Debt Repayment)
-                        return a.type === 'Expense' || a.type === 'Asset' || a.type === 'Liability';
-                      }).map(acc => (
-                        <option key={acc.id} value={acc.id}>{acc.name}</option>
+                <div className="space-y-6">
+                  <div className="space-y-4">
+                    <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[var(--color-brand-gray)] mb-2 px-1">Settlement Protocol</label>
+                    <div className="flex gap-2 p-1.5 bg-[var(--background)] rounded-2xl ring-1 ring-[var(--border)] overflow-x-auto">
+                      {[
+                        { id: 'cash', label: 'Cash', color: 'var(--color-brand-peach)' },
+                        { id: 'credit', label: 'Payable', color: 'var(--color-brand-gold)' },
+                        { id: 'loan', label: 'Loan', color: '#60a5fa' },
+                        { id: 'receivable', label: 'Receivable', color: '#10b981' }
+                      ].map((mode) => (
+                        <button
+                          key={mode.id}
+                          type="button"
+                          onClick={() => {
+                            setFormData({
+                              ...formData, 
+                              payment_mode: mode.id, 
+                              type: (mode.id === 'loan' || mode.id === 'receivable') ? 'income' : formData.type,
+                              account_id: '' // Reset account when mode changes
+                            });
+                          }}
+                          className={`flex-1 py-3 px-4 text-[9px] font-black uppercase tracking-[0.2em] rounded-xl transition-all whitespace-nowrap ${formData.payment_mode === mode.id ? 'bg-[var(--foreground)] text-[var(--background)] shadow-xl' : 'text-gray-400 hover:text-gray-600'}`}
+                          style={formData.payment_mode === mode.id ? { color: mode.color } : {}}
+                        >
+                          {mode.label}
+                        </button>
                       ))}
-                    </select>
-                  </div>
-                  <div className="space-y-6">
-                    <div className="space-y-4">
-                      <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[var(--color-brand-gray)] mb-2 px-1">Settlement Protocol</label>
-                      <div className="flex gap-2 p-1.5 bg-[var(--background)] rounded-2xl ring-1 ring-[var(--border)] overflow-x-auto">
-                        {[
-                          { id: 'cash', label: 'Cash', color: 'var(--color-brand-peach)' },
-                          { id: 'credit', label: 'Payable', color: 'var(--color-brand-gold)' },
-                          { id: 'loan', label: 'Loan', color: '#60a5fa' },
-                          { id: 'receivable', label: 'Receivable', color: '#10b981' }
-                        ].map((mode) => (
-                          <button
-                            key={mode.id}
-                            type="button"
-                            onClick={() => {
-                              setFormData({
-                                ...formData, 
-                                payment_mode: mode.id, 
-                                type: (mode.id === 'loan' || mode.id === 'receivable') ? 'income' : formData.type,
-                                account_id: '' // Reset account when mode changes
-                              });
-                            }}
-                            className={`flex-1 py-3 px-4 text-[9px] font-black uppercase tracking-[0.2em] rounded-xl transition-all whitespace-nowrap ${formData.payment_mode === mode.id ? 'bg-[var(--foreground)] text-[var(--background)] shadow-xl' : 'text-gray-400 hover:text-gray-600'}`}
-                            style={formData.payment_mode === mode.id ? { color: mode.color } : {}}
-                          >
-                            {mode.label}
-                          </button>
-                        ))}
-                      </div>
                     </div>
+                  </div>
 
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     <div className="space-y-4">
                       <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[var(--color-brand-gray)] mb-2 px-1">Flow Protocol</label>
                       <div className="flex gap-2 p-1.5 bg-[var(--background)] rounded-2xl ring-1 ring-[var(--border)]">
@@ -377,7 +460,7 @@ function UploadForm() {
                           onClick={() => setFormData({...formData, type: 'expense'})}
                           className={`flex-1 py-3 px-4 text-[9px] font-black uppercase tracking-[0.2em] rounded-xl transition-all ${formData.type === 'expense' && formData.payment_mode !== 'loan' && formData.payment_mode !== 'receivable' ? 'bg-[var(--foreground)] text-[var(--color-status-red)] shadow-xl' : 'text-gray-400 hover:text-gray-200'}`}
                         >
-                          Expense
+                          {formData.isInventory ? "Buy Stock" : "Expense"}
                         </button>
                         <button
                           type="button"
@@ -385,10 +468,34 @@ function UploadForm() {
                           onClick={() => setFormData({...formData, type: 'income'})}
                           className={`flex-1 py-3 px-4 text-[9px] font-black uppercase tracking-[0.2em] rounded-xl transition-all ${formData.type === 'income' || formData.payment_mode === 'loan' || formData.payment_mode === 'receivable' ? 'bg-[var(--foreground)] text-[var(--color-status-green)] shadow-xl' : 'text-gray-400 hover:text-gray-200'}`}
                         >
-                          Income
+                          {formData.isInventory ? "Sell Stock" : "Income"}
                         </button>
                       </div>
                     </div>
+
+                    {!formData.isInventory && (
+                      <div>
+                        <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[var(--color-brand-gray)] mb-2 px-1">
+                          Mapping Account
+                        </label>
+                        <select 
+                          value={formData.account_id}
+                          onChange={(e) => setFormData({...formData, account_id: e.target.value})}
+                          className="neo-input appearance-none cursor-pointer"
+                          required
+                        >
+                          <option value="">Select Account...</option>
+                          {accounts.filter(a => {
+                            if (formData.payment_mode === 'loan') return a.type === 'Liability';
+                            if (formData.type === 'income') return a.type === 'Income';
+                            // For Outflows (Expense flow), allow Expenses, Assets (Inventory), OR Liabilities (Debt Repayment)
+                            return a.type === 'Expense' || a.type === 'Asset' || a.type === 'Liability';
+                          }).map(acc => (
+                            <option key={acc.id} value={acc.id}>{acc.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage() {
   const supabase = await createClient();
-  
+
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
@@ -19,14 +19,7 @@ export default async function DashboardPage() {
     .single();
 
   if (!business) {
-    const { data: newBusiness, error } = await supabase
-      .from('businesses')
-      .insert({ user_id: user.id, name: 'My Business' })
-      .select()
-      .single();
-      
-    if (error) console.error('Error creating business:', error);
-    business = newBusiness;
+    redirect('/setup');
   }
 
   // Fetch accounts to calculate balances
@@ -37,7 +30,7 @@ export default async function DashboardPage() {
       journal_entry_lines ( debit, credit )
     `)
     .eq('business_id', business.id);
-    
+
   if (error) console.error('Error fetching accounts:', error);
 
   // Calculate balances from ledger lines
@@ -62,7 +55,7 @@ export default async function DashboardPage() {
     } else if (account.type === 'Expense') {
       totalExpense += (debitTotal - creditTotal);
     }
-    
+
     if (account.name === 'Cash') {
       totalCash += (debitTotal - creditTotal);
     }
@@ -71,7 +64,7 @@ export default async function DashboardPage() {
   const netProfit = totalIncome - totalExpense;
 
   // Map for charts
-  const chartTransactions = (accounts || []).flatMap(acc => 
+  const chartTransactions = (accounts || []).flatMap(acc =>
     (acc.journal_entry_lines || []).map((line: any) => ({
       id: line.id,
       type: acc.type === 'Income' ? 'income' : 'expense',
@@ -92,17 +85,17 @@ export default async function DashboardPage() {
           <h1 className="text-4xl font-black tracking-tight text-[var(--foreground)]">Financial Overview</h1>
           <p className="text-[var(--color-brand-gray)] font-medium mt-1">Real-time data from your smart ledger</p>
         </div>
-        
+
         <div className="flex items-center gap-3">
-          <a 
-            href="/upload" 
+          <a
+            href="/upload"
             className="px-6 py-3 bg-[var(--surface)] text-[var(--foreground)] rounded-2xl border border-[var(--border)] text-[10px] font-black tracking-widest uppercase hover:bg-[var(--foreground)] hover:text-[var(--background)] transition-all flex items-center gap-2 group shadow-lg shadow-black/5"
           >
             <TrendingUp className="w-4 h-4 text-[var(--color-brand-peach)] group-hover:text-[var(--color-brand-gold)]" />
             Manual Record
           </a>
-          <a 
-            href="/upload" 
+          <a
+            href="/upload"
             className="px-6 py-3 bg-[var(--color-brand-peach)] text-[var(--color-brand-dark)] rounded-2xl text-[10px] font-black tracking-widest uppercase shadow-xl shadow-[var(--color-brand-peach)]/20 hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
           >
             <DollarSign className="w-4 h-4" />
@@ -121,10 +114,10 @@ export default async function DashboardPage() {
             </div>
             <p className="text-[9px] font-black uppercase tracking-widest text-[var(--color-brand-peach)] mt-2">Available Liquidity</p>
           </div>
-          
+
           <div className="mt-4 relative z-10">
             <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
-               <div className="h-full bg-[var(--color-brand-peach)] w-2/3 opacity-30" />
+              <div className="h-full bg-[var(--color-brand-peach)] w-2/3 opacity-30" />
             </div>
           </div>
         </div>

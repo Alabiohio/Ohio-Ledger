@@ -30,7 +30,7 @@ export default async function IncomeStatementPage(props: IncomeStatementProps) {
     .single();
 
   if (!business) {
-    return <div className="p-8">Please initialize your business in the Dashboard.</div>;
+    redirect('/setup');
   }
 
   const { data: lineRows, error } = await supabase

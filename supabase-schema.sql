@@ -42,6 +42,7 @@ CREATE TABLE businesses (
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   description TEXT,
+  website_url TEXT,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -54,6 +55,7 @@ CREATE TABLE accounts (
   type TEXT NOT NULL CHECK (type IN ('Asset', 'Liability', 'Equity', 'Income', 'Expense')),
   category TEXT, -- e.g., 'Current Asset', 'Long Term Liability'
   is_default BOOLEAN DEFAULT false, -- To mark system-level accounts
+  monthly_budget NUMERIC DEFAULT 0, -- For tracking Budget vs Actual
   created_at TIMESTAMPTZ DEFAULT now()
 );
 

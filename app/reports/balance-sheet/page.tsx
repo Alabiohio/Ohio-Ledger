@@ -42,7 +42,7 @@ export default async function BalanceSheetPage(props: BalanceSheetProps) {
     .single();
 
   if (!business) {
-    return <div className="p-8">Please initialize your business in the Dashboard.</div>;
+    redirect('/setup');
   }
 
   const [{ data: accountRows, error: accountsError }, { data: lineRows, error: linesError }] = await Promise.all([

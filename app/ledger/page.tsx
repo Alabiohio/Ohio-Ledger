@@ -18,7 +18,7 @@ export default async function LedgerPage(props: {
     .eq('user_id', user.id)
     .single();
 
-  if (!business) return <div className="p-8">Please navigate to Dashboard first to initialize your business.</div>;
+  if (!business) redirect('/setup');
 
   // Fetch Accounts for the dropdown filter
   const { data: accounts } = await supabase

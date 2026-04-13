@@ -1,18 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { m } from "framer-motion";
 
 type ThemeMode = "system" | "light" | "dark";
 
 const THEME_STORAGE_KEY = "ohio-ledger-theme";
 
-function getSystemPrefersDark(): boolean {
-  return window.matchMedia("(prefers-color-scheme: dark)").matches;
-}
-
-function applyTheme(mode: ThemeMode) {
+function applyTheme(mode: ThemeMode, systemPrefersDark: boolean) {
   const root = document.documentElement;
-  const resolvedDark = mode === "dark" || (mode === "system" && getSystemPrefersDark());
+  const resolvedDark = mode === "dark" || (mode === "system" && systemPrefersDark);
 
   if (mode === "system") {
     root.removeAttribute("data-theme");
@@ -25,10 +22,9 @@ function applyTheme(mode: ThemeMode) {
 
 export default function ThemeToggle() {
   const [mode, setMode] = useState<ThemeMode>("system");
-  const [mounted, setMounted] = useState(false);
+  const [systemPrefersDark, setSystemPrefersDark] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
     const stored = localStorage.getItem(THEME_STORAGE_KEY) as ThemeMode | null;
     if (stored === "light" || stored === "dark" || stored === "system") {
       setMode(stored);
@@ -36,23 +32,27 @@ export default function ThemeToggle() {
   }, []);
 
   useEffect(() => {
-    applyTheme(mode);
-
     const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const onSystemThemeChange = () => {
-      if (mode === "system") {
-        applyTheme("system");
-      }
-    };
+    const handleChange = () => setSystemPrefersDark(media.matches);
 
-    media.addEventListener("change", onSystemThemeChange);
-    return () => media.removeEventListener("change", onSystemThemeChange);
-  }, [mode]);
+    handleChange();
+
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", handleChange);
+      return () => media.removeEventListener("change", handleChange);
+    }
+
+    media.addListener(handleChange);
+    return () => media.removeListener(handleChange);
+  }, []);
+
+  useEffect(() => {
+    applyTheme(mode, systemPrefersDark);
+  }, [mode, systemPrefersDark]);
 
   const setTheme = (nextMode: ThemeMode) => {
     setMode(nextMode);
     localStorage.setItem(THEME_STORAGE_KEY, nextMode);
-    applyTheme(nextMode);
   };
 
   return (
@@ -61,10 +61,12 @@ export default function ThemeToggle() {
         {(["system", "light", "dark"] as ThemeMode[]).map((option) => {
           const active = mode === option;
           return (
-            <button
+            <m.button
               key={option}
               type="button"
               onClick={() => setTheme(option)}
+              whileTap={{ scale: 0.96 }}
+              transition={{ type: "spring", stiffness: 300, damping: 24 }}
               className={`px-3 py-1.5 rounded-lg capitalize transition-colors ${
                 active
                   ? "bg-[var(--color-brand-peach)] text-[var(--color-ink)]"
@@ -72,7 +74,7 @@ export default function ThemeToggle() {
               }`}
             >
               {option}
-            </button>
+            </m.button>
           );
         })}
       </div>

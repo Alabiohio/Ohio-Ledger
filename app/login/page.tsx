@@ -8,10 +8,10 @@ export default async function LoginPage(props: {
   const isError = searchParams?.error === 'true'
 
   return (
-    <div className="flex-1 flex flex-col w-full px-8 sm:max-w-md justify-center gap-2 mx-auto mt-20">
+    <div className="flex-1 flex flex-col w-full px-1 sm:max-w-md justify-center gap-2 mx-auto mt-20">
       <Link
         href="/"
-        className="absolute left-8 top-8 py-2 px-4 rounded-md no-underline text-gray-400 hover:text-white flex items-center group text-sm"
+        className="absolute left-8 top-8 py-2 px-2 rounded-xl no-underline text-gray-400 hover:text-white flex items-center group text-sm"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -68,19 +68,19 @@ export default async function LoginPage(props: {
             />
           </div>
         </div>
-        
+
         <div className="flex flex-col gap-3 pt-4">
           <button
             formAction={login}
             className="w-full bg-ohio-peach hover:bg-ohio-gold text-[var(--color-brand-dark)] font-black uppercase tracking-[0.15em] py-4 rounded-xl transition-all duration-500 shadow-xl shadow-ohio-peach/20 hover:shadow-ohio-gold/30 text-xs"
           >
-            Authenticate Stream
+            Login
           </button>
           <button
             formAction={signup}
             className="w-full border-2 border-gray-500/20 bg-transparent hover:bg-gray-500/5 text-[var(--foreground)] font-black uppercase tracking-[0.15em] py-4 rounded-xl transition-all duration-500 text-xs"
           >
-            Bootstrap New Node
+            Create Account
           </button>
         </div>
 

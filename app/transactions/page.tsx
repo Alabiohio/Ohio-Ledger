@@ -15,7 +15,7 @@ export default async function TransactionsPage() {
     .eq('user_id', user.id)
     .single();
 
-  if (!business) return <div className="p-8">Please initialize your business in the Dashboard.</div>;
+  if (!business) redirect('/setup');
 
   // We want to show "Transactions" which are Journal Entries with their primary mapping line.
   // In a double-entry system, one Journal Entry has multiple lines. 
